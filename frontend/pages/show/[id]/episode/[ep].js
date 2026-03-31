@@ -8,7 +8,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5
 
 export default function EpisodeDownloadPage() {
   const router = useRouter();
-  const { id, ep, title } = router.query;
+  const { id, ep, title, season, year } = router.query;
   const [downloadData, setDownloadData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -26,7 +26,7 @@ export default function EpisodeDownloadPage() {
         setError("");
 
         const response = await fetch(
-          `${API_BASE_URL}/api/download?show=${encodeURIComponent(title)}&ep=${encodeURIComponent(ep)}`
+          `${API_BASE_URL}/api/download?show=${encodeURIComponent(title)}&ep=${encodeURIComponent(ep)}&season=${encodeURIComponent(season || "")}&year=${encodeURIComponent(year || "")}`
         );
 
         const data = await response.json();
@@ -53,7 +53,7 @@ export default function EpisodeDownloadPage() {
     return () => {
       active = false;
     };
-  }, [ep, router.isReady, title]);
+  }, [ep, router.isReady, season, title, year]);
 
   return (
     <>
@@ -72,25 +72,41 @@ export default function EpisodeDownloadPage() {
         <section className="subpage-hero compact">
           <span className="eyebrow">Download</span>
           <h1>{title ? `${title} Episode ${ep}` : `Episode ${ep}`}</h1>
-          <p>Choose a quality and start the direct download.</p>
+          <p>
+            {downloadData?.fallbackUsed
+              ? "Direct quality extraction is blocked right now, so fallback server links are shown below."
+              : "Choose a quality and start the direct download."}
+          </p>
         </section>
 
         {loading ? <p className="status-card">Resolving sources...</p> : null}
         {error ? (
           <p className="status-card error">
-            {error} If Consumet is unavailable, try again shortly or switch to a different episode.
+            {error} If the provider is blocked, try again shortly or switch to a different episode.
           </p>
+        ) : null}
+
+        {downloadData?.message ? (
+          <p className="status-card">{downloadData.message}</p>
         ) : null}
 
         {downloadData?.downloads?.length ? (
           <div className="download-grid">
             {downloadData.downloads.map((item) => (
               <article key={item.url} className="download-card">
-                <span className="eyebrow">Quality</span>
+                <span className="eyebrow">
+                  {downloadData.fallbackUsed ? "Server" : "Quality"}
+                </span>
                 <h2>{item.quality || "Auto"}</h2>
-                <p>{item.isM3U8 ? "Streaming source" : "Direct file link"}</p>
+                <p>
+                  {downloadData.fallbackUsed
+                    ? "Open this provider server when direct extraction is unavailable."
+                    : item.isM3U8
+                      ? "Streaming source"
+                      : "Direct file link"}
+                </p>
                 <a className="download-link compact" href={item.url} target="_blank" rel="noreferrer">
-                  Download {item.quality || "Source"}
+                  {downloadData.fallbackUsed ? "Open server" : `Download ${item.quality || "Source"}`}
                 </a>
               </article>
             ))}

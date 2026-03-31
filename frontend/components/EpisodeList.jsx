@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export default function EpisodeList({ showId, showTitle, season }) {
+export default function EpisodeList({ showId, showTitle, showYear, season }) {
   if (!season?.episodes?.length) {
     return <p className="status-card">No episodes available for this season yet.</p>;
   }
@@ -20,7 +20,7 @@ export default function EpisodeList({ showId, showTitle, season }) {
           </div>
 
           <Link
-            href={`/show/${showId}/episode/${episode.episode_number}?title=${encodeURIComponent(showTitle)}`}
+            href={`/show/${showId}/episode/${episode.episode_number}?title=${encodeURIComponent(showTitle)}&season=${encodeURIComponent(season.season_number)}&year=${encodeURIComponent(showYear || "")}`}
             className="download-link compact"
           >
             Download

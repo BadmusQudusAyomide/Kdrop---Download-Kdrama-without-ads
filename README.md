@@ -1,6 +1,6 @@
 # KDrop
 
-A KDrama discovery and download site with live TMDB metadata and live Consumet download resolution.
+A KDrama discovery and episode-link site with live TMDB metadata and backend provider resolution.
 
 ## Environment
 
@@ -8,7 +8,7 @@ Backend `.env`:
 
 - `PORT=5000`
 - `TMDB_API_KEY=your_tmdb_api_key`
-- `CONSUMET_BASE_URL=https://your-consumet-instance.onrender.com`
+- `YT_DLP_PATH=yt-dlp`
 
 Frontend `.env.local`:
 
@@ -29,12 +29,7 @@ Backend on Render:
 - Start command: `npm start`
 - Environment variables:
   - `TMDB_API_KEY`
-  - `CONSUMET_BASE_URL`
-
-Consumet on Render:
-
-- Deploy your separate Consumet service first
-- Copy its live base URL into the backend `CONSUMET_BASE_URL`
+  - `YT_DLP_PATH`
 
 ## Local Run
 
@@ -60,4 +55,4 @@ npm run dev
 - `GET /api/trending?section=new-releases`
 - `GET /api/search?q=queen`
 - `GET /api/show/:id`
-- `GET /api/download?show=Queen%20of%20Tears&ep=1`
+- `GET /api/download?show=Queen%20of%20Tears&ep=1&season=1&year=2024`

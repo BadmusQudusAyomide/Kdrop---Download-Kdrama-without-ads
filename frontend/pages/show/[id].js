@@ -147,6 +147,7 @@ export default function ShowPage() {
               <EpisodeList
                 showId={show.id}
                 showTitle={show.title}
+                showYear={show.first_air_date?.slice(0, 4)}
                 season={selectedSeason}
               />
             </section>

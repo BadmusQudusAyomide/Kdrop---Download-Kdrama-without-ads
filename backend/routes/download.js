@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get("/", async (request, response, next) => {
   try {
-    const { show = "", ep = "" } = request.query;
+    const { show = "", ep = "", season = "", year = "" } = request.query;
 
     if (!show.trim() || !ep) {
       const error = new Error("Both show and ep query parameters are required.");
@@ -13,7 +13,10 @@ router.get("/", async (request, response, next) => {
       throw error;
     }
 
-    const result = await resolveEpisodeDownload(show, ep);
+    const result = await resolveEpisodeDownload(show, ep, {
+      seasonNumber: season,
+      year
+    });
     response.json(result);
   } catch (error) {
     next(error);

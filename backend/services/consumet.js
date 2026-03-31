@@ -1,80 +1,75 @@
-function createHttpError(message, statusCode) {
+const { MOVIES, StreamingServers } = require("@consumet/extensions");
+const { extractDownloadsWithYtDlp } = require("./ytdlp");
+
+function createHttpError(message, statusCode, details) {
   const error = new Error(message);
   error.statusCode = statusCode;
+
+  if (details) {
+    error.details = details;
+  }
+
   return error;
 }
 
-async function consumetFetch(path, params = {}) {
-  const baseUrl = process.env.CONSUMET_BASE_URL;
-
-  if (!baseUrl) {
-    throw createHttpError("CONSUMET_BASE_URL is missing from backend environment variables.", 500);
-  }
-
-  const url = new URL(path, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
-
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") {
-      url.searchParams.set(key, String(value));
-    }
-  });
-
-  const response = await fetch(url);
-  if (!response.ok) {
-    const body = await response.text();
-    throw createHttpError(`Consumet request failed: ${body}`, response.status);
-  }
-
-  return response.json();
-}
-
 function normalizeTitle(value) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
-async function searchDramacool(showTitle) {
-  const attempts = [
-    showTitle,
-    normalizeTitle(showTitle)
-  ].filter(Boolean);
+function scoreResult(result, showTitle, year) {
+  const normalizedTarget = normalizeTitle(showTitle);
+  const normalizedTitle = normalizeTitle(result.title || "");
+  let score = 0;
 
-  for (const attempt of attempts) {
-    const data = await consumetFetch(`/movies/dramacool/${encodeURIComponent(attempt)}`);
-    const results = data.results || data;
-
-    if (Array.isArray(results) && results.length) {
-      return results;
-    }
+  if (normalizedTitle === normalizedTarget) {
+    score += 120;
+  } else if (normalizedTitle.includes(normalizedTarget)) {
+    score += 80;
+  } else if (normalizedTarget.includes(normalizedTitle)) {
+    score += 50;
   }
 
-  return [];
+  if (result.type === "TV Series") {
+    score += 25;
+  }
+
+  if (year && String(result.releaseDate || "").includes(String(year))) {
+    score += 15;
+  }
+
+  return score;
 }
 
-function selectBestShowMatch(results, showTitle) {
-  const normalizedTarget = normalizeTitle(showTitle);
-
-  return (
-    results.find((item) => normalizeTitle(item.title || item.name || "").includes(normalizedTarget)) ||
-    results[0]
-  );
+function selectBestShowMatch(results, showTitle, year) {
+  return [...results]
+    .sort((left, right) => scoreResult(right, showTitle, year) - scoreResult(left, showTitle, year))[0];
 }
 
-function selectEpisode(info, episodeNumber) {
+function selectEpisode(info, episodeNumber, seasonNumber) {
   const targetEpisode = Number(episodeNumber);
+  const targetSeason = seasonNumber ? Number(seasonNumber) : null;
 
   return (info.episodes || []).find((episode) => {
-    const numberFromField = Number(episode.number || episode.episodeNumber || episode.episode);
+    const matchesEpisode =
+      Number(episode.number || episode.episodeNumber || episode.episode) === targetEpisode;
 
-    if (!Number.isNaN(numberFromField) && numberFromField === targetEpisode) {
+    if (!matchesEpisode) {
+      return false;
+    }
+
+    if (targetSeason === null || Number.isNaN(targetSeason)) {
       return true;
     }
 
-    return String(episode.id || "").includes(`episode-${targetEpisode}`);
+    return Number(episode.season) === targetSeason;
   });
 }
 
 function mapDownloads(payload) {
-  const sources = payload.sources || payload.downloads || [];
+  const sources = payload?.sources || payload?.downloads || [];
 
   return sources
     .map((source) => ({
@@ -85,33 +80,150 @@ function mapDownloads(payload) {
     .filter((item) => item.url);
 }
 
-async function resolveEpisodeDownload(showTitle, episodeNumber) {
-  const searchResults = await searchDramacool(showTitle);
+function mapServerLinks(servers, providerName) {
+  return (servers || []).map((server) => ({
+    quality: `${server.name || "server"} server`,
+    url: server.url,
+    isM3U8: false,
+    provider: providerName,
+    isFallback: true
+  }));
+}
 
-  if (!Array.isArray(searchResults) || !searchResults.length) {
-    throw createHttpError("No matching show found in Consumet.", 404);
+async function tryProvider(ProviderClass, options) {
+  const provider = new ProviderClass();
+  const { showTitle, episodeNumber, seasonNumber, year, serverPreference } = options;
+
+  const searchData = await provider.search(showTitle, 1);
+  const searchResults = searchData?.results || [];
+
+  if (!searchResults.length) {
+    throw createHttpError(`No match found for ${showTitle}.`, 404);
   }
 
-  const selectedShow = selectBestShowMatch(searchResults, showTitle);
-  const info = await consumetFetch("/movies/dramacool/info", { id: selectedShow.id });
-  const episode = selectEpisode(info, episodeNumber);
+  const selectedShow = selectBestShowMatch(searchResults, showTitle, year);
+  const info = await provider.fetchMediaInfo(selectedShow.id);
+  const episode = selectEpisode(info, episodeNumber, seasonNumber);
 
   if (!episode) {
     throw createHttpError(`Episode ${episodeNumber} was not found for ${showTitle}.`, 404);
   }
 
-  const streamData = await consumetFetch("/movies/dramacool/watch", { episodeId: episode.id });
-  const downloads = mapDownloads(streamData);
+  const servers = await provider.fetchEpisodeServers(episode.id, info.id);
+  const serverFailures = [];
 
-  if (!downloads.length) {
-    throw createHttpError("Consumet returned no downloadable sources for this episode.", 404);
+  for (const preferredName of [serverPreference, ...servers.map((server) => server.name)]) {
+    const server =
+      servers.find((item) => String(item.name).toLowerCase() === String(preferredName).toLowerCase()) ||
+      null;
+
+    if (!server) {
+      continue;
+    }
+
+    try {
+      const ytDlpResult = await extractDownloadsWithYtDlp(server.url);
+
+      if (ytDlpResult.downloads.length) {
+        return {
+          provider: provider.name,
+          show: info.title || selectedShow.title || showTitle,
+          episode: episodeNumber,
+          season: seasonNumber || episode.season || null,
+          downloads: ytDlpResult.downloads,
+          fallbackUsed: false,
+          extractor: ytDlpResult.extractor,
+          serverUsed: server.name
+        };
+      }
+    } catch (error) {
+      serverFailures.push({
+        step: "yt-dlp",
+        server: server.name,
+        message: error.message
+      });
+    }
+  }
+
+  try {
+    const streamData = await provider.fetchEpisodeSources(
+      episode.id,
+      info.id,
+      serverPreference
+    );
+
+    const downloads = mapDownloads(streamData);
+
+    if (downloads.length) {
+      return {
+        provider: provider.name,
+        show: info.title || selectedShow.title || showTitle,
+        episode: episodeNumber,
+        season: seasonNumber || episode.season || null,
+        downloads,
+        fallbackUsed: false,
+        serverUsed: serverPreference
+      };
+    }
+  } catch (error) {
+    if (!servers?.length) {
+      throw createHttpError(
+        `Source extraction failed for ${provider.name}.`,
+        502,
+        { cause: error.message }
+      );
+    }
+
+    serverFailures.push({
+      step: "provider-extractor",
+      server: serverPreference,
+      message: error.message
+    });
   }
 
   return {
-    show: selectedShow.title || selectedShow.name || showTitle,
+    provider: provider.name,
+    show: info.title || selectedShow.title || showTitle,
     episode: episodeNumber,
-    downloads
+    season: seasonNumber || episode.season || null,
+    downloads: mapServerLinks(servers, provider.name),
+    fallbackUsed: true,
+    message: "Direct quality extraction was blocked upstream, so server links were returned instead.",
+    debug: {
+      provider: provider.name,
+      failures: serverFailures
+    }
   };
+}
+
+async function resolveEpisodeDownload(showTitle, episodeNumber, options = {}) {
+  const attempts = [
+    { ProviderClass: MOVIES.FlixHQ, serverPreference: StreamingServers.VidCloud },
+    { ProviderClass: MOVIES.Goku, serverPreference: StreamingServers.VidCloud },
+    { ProviderClass: MOVIES.HiMovies, serverPreference: StreamingServers.MegaCloud },
+    { ProviderClass: MOVIES.SFlix, serverPreference: StreamingServers.VidCloud }
+  ];
+
+  const failures = [];
+
+  for (const attempt of attempts) {
+    try {
+      return await tryProvider(attempt.ProviderClass, {
+        ...options,
+        showTitle,
+        episodeNumber,
+        serverPreference: attempt.serverPreference
+      });
+    } catch (error) {
+      failures.push(`${attempt.ProviderClass.name}: ${error.message}`);
+    }
+  }
+
+  throw createHttpError(
+    "No working download provider could resolve this episode right now.",
+    502,
+    { failures }
+  );
 }
 
 module.exports = {
