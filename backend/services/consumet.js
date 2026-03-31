@@ -32,6 +32,24 @@ function normalizeTitle(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+async function searchDramacool(showTitle) {
+  const attempts = [
+    showTitle,
+    normalizeTitle(showTitle)
+  ].filter(Boolean);
+
+  for (const attempt of attempts) {
+    const data = await consumetFetch(`/movies/dramacool/${encodeURIComponent(attempt)}`);
+    const results = data.results || data;
+
+    if (Array.isArray(results) && results.length) {
+      return results;
+    }
+  }
+
+  return [];
+}
+
 function selectBestShowMatch(results, showTitle) {
   const normalizedTarget = normalizeTitle(showTitle);
 
@@ -68,8 +86,7 @@ function mapDownloads(payload) {
 }
 
 async function resolveEpisodeDownload(showTitle, episodeNumber) {
-  const searchData = await consumetFetch("/movies/dramacool", { query: showTitle });
-  const searchResults = searchData.results || searchData;
+  const searchResults = await searchDramacool(showTitle);
 
   if (!Array.isArray(searchResults) || !searchResults.length) {
     throw createHttpError("No matching show found in Consumet.", 404);
