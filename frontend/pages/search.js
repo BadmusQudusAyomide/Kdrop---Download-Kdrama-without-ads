@@ -1,6 +1,8 @@
 import Head from "next/head";
+import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
+import BrandMark from "../components/BrandMark";
 import SearchBar from "../components/SearchBar";
 import ShowCard from "../components/ShowCard";
 
@@ -64,9 +66,17 @@ export default function SearchPage() {
       </Head>
 
       <main className="page-shell">
+        <section className="topbar compact-bar">
+          <BrandMark href="/" subtitle="Back to home" />
+        </section>
+
         <section className="subpage-hero">
           <span className="eyebrow">Search</span>
           <h1>Find Korean dramas by title.</h1>
+          <p className="subpage-copy">
+            Search stays focused on Korean-language TV results so the grid feels curated,
+            not noisy.
+          </p>
           <SearchBar initialValue={query} />
         </section>
 
@@ -83,6 +93,9 @@ export default function SearchPage() {
                 <span className="eyebrow">Results</span>
                 <h2>{results.length} dramas found</h2>
               </div>
+              <p className="section-note">
+                {query ? `Showing Korean TV matches for "${query}".` : ""}
+              </p>
             </div>
             <div className="show-grid">
               {results.map((show) => (

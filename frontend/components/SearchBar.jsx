@@ -21,12 +21,15 @@ export default function SearchBar({ initialValue = "" }) {
 
   return (
     <form className="search-bar" onSubmit={handleSubmit}>
-      <input
-        aria-label="Search Korean dramas"
-        placeholder="Search Korean dramas..."
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-      />
+      <label className="search-field">
+        <span className="search-hint">Search by title</span>
+        <input
+          aria-label="Search Korean dramas"
+          placeholder="Search Korean dramas..."
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </label>
       <button type="submit">Search</button>
     </form>
   );

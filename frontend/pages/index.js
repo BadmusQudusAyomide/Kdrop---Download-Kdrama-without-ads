@@ -1,6 +1,7 @@
 import Head from "next/head";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import BrandMark from "../components/BrandMark";
 import SearchBar from "../components/SearchBar";
 import ShowCard from "../components/ShowCard";
 
@@ -78,6 +79,11 @@ export default function HomePage() {
       </Head>
 
       <main className="page-shell">
+        <section className="topbar">
+          <BrandMark subtitle="KDrama discovery" />
+          <p className="topbar-note">Clean browsing for Korean drama fans.</p>
+        </section>
+
         <section className="hero">
           <div className="hero-copy">
             <span className="eyebrow">KDrama Discovery</span>
@@ -87,6 +93,11 @@ export default function HomePage() {
               episode downloads without clutter.
             </p>
             <SearchBar />
+            <div className="hero-pills">
+              <span>Fast search</span>
+              <span>Live TMDB metadata</span>
+              <span>Mobile-ready browsing</span>
+            </div>
           </div>
 
           <div className="hero-panel">
@@ -105,10 +116,22 @@ export default function HomePage() {
                 <span>Language-focused catalog</span>
               </div>
             </div>
+            <div className="hero-feature">
+              <span className="eyebrow">Focused Experience</span>
+              <p>No clutter, no ad-heavy pages, just title discovery and episode flow.</p>
+            </div>
           </div>
         </section>
 
-        <section className="section-row">
+        <section className="section-row spotlight-row">
+          <article className="spotlight-card">
+            <span className="eyebrow">Tonight&apos;s Mood</span>
+            <h2>Browse by vibe before you search.</h2>
+            <p>
+              Pick a genre and the homepage reshapes itself around romance, thrillers,
+              historical stories, and lighter comfort-watch picks.
+            </p>
+          </article>
           <div className="section-header">
             <div>
               <span className="eyebrow">Browse</span>

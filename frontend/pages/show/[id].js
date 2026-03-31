@@ -2,6 +2,7 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
+import BrandMark from "../../components/BrandMark";
 import EpisodeList from "../../components/EpisodeList";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000";
@@ -74,9 +75,12 @@ export default function ShowPage() {
       </Head>
 
       <main className="page-shell">
-        <Link href="/" className="inline-link">
-          Back to home
-        </Link>
+        <section className="topbar compact-bar">
+          <BrandMark href="/" subtitle="Back to browse" />
+          <Link href="/" className="inline-link">
+            Home
+          </Link>
+        </section>
 
         {error ? <p className="status-card error">{error}</p> : null}
 
@@ -105,6 +109,17 @@ export default function ShowPage() {
                   Cast: {show.cast?.length ? show.cast.map((member) => member.name).join(", ") : "Not available"}
                 </p>
               </div>
+              <aside className="show-side-panel">
+                <span className="eyebrow">Quick Snapshot</span>
+                <div className="side-stat">
+                  <strong>{show.seasons?.[0]?.episodes?.length || "--"}</strong>
+                  <span>Episodes in selected catalog</span>
+                </div>
+                <div className="side-stat">
+                  <strong>{show.cast?.length || "--"}</strong>
+                  <span>Main cast shown</span>
+                </div>
+              </aside>
             </section>
 
             <section className="section-row">
@@ -113,17 +128,20 @@ export default function ShowPage() {
                   <span className="eyebrow">Episodes</span>
                   <h2>Select a season</h2>
                 </div>
-                <select
-                  className="season-select"
-                  value={seasonNumber}
-                  onChange={(event) => setSeasonNumber(event.target.value)}
-                >
-                  {show.seasons.map((season) => (
-                    <option key={season.id} value={season.season_number}>
-                      {season.name || `Season ${season.season_number}`}
-                    </option>
-                  ))}
-                </select>
+                <div className="season-picker">
+                  <span className="section-note">Choose season</span>
+                  <select
+                    className="season-select"
+                    value={seasonNumber}
+                    onChange={(event) => setSeasonNumber(event.target.value)}
+                  >
+                    {show.seasons.map((season) => (
+                      <option key={season.id} value={season.season_number}>
+                        {season.name || `Season ${season.season_number}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <EpisodeList

@@ -11,9 +11,13 @@ export default function ShowCard({ show }) {
         )}
       </div>
       <div className="show-card-copy">
+        <span className="card-tag">Series</span>
         <h3>{show.title}</h3>
-        <p>{show.year || "TBA"}</p>
-        <span>{show.vote_average ? `${show.vote_average.toFixed(1)} / 10` : "Unrated"}</span>
+        <p>{show.overview || "Explore seasons, episodes, and cast details."}</p>
+        <div className="show-card-meta">
+          <span>{show.year || "TBA"}</span>
+          <span>{show.vote_average ? `${show.vote_average.toFixed(1)} / 10` : "Unrated"}</span>
+        </div>
       </div>
     </Link>
   );

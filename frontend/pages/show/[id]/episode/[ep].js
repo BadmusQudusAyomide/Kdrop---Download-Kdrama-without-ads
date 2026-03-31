@@ -2,6 +2,7 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
+import BrandMark from "../../../../components/BrandMark";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000";
 
@@ -61,9 +62,12 @@ export default function EpisodeDownloadPage() {
       </Head>
 
       <main className="page-shell">
-        <Link href={`/show/${id}`} className="inline-link">
-          Back to show
-        </Link>
+        <section className="topbar compact-bar">
+          <BrandMark href="/" subtitle="Episode sources" />
+          <Link href={`/show/${id}`} className="inline-link">
+            Back to show
+          </Link>
+        </section>
 
         <section className="subpage-hero compact">
           <span className="eyebrow">Download</span>
@@ -85,7 +89,7 @@ export default function EpisodeDownloadPage() {
                 <span className="eyebrow">Quality</span>
                 <h2>{item.quality || "Auto"}</h2>
                 <p>{item.isM3U8 ? "Streaming source" : "Direct file link"}</p>
-                <a className="download-link" href={item.url} target="_blank" rel="noreferrer">
+                <a className="download-link compact" href={item.url} target="_blank" rel="noreferrer">
                   Download {item.quality || "Source"}
                 </a>
               </article>
