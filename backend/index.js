@@ -3,6 +3,7 @@ const dotenv = require("dotenv");
 const express = require("express");
 
 const trendingRoute = require("./routes/trending");
+const discoverRoute = require("./routes/discover");
 const searchRoute = require("./routes/search");
 const showRoute = require("./routes/show");
 const downloadRoute = require("./routes/download");
@@ -20,6 +21,7 @@ app.get("/api/health", (_request, response) => {
 });
 
 app.use("/api/trending", trendingRoute);
+app.use("/api/discover", discoverRoute);
 app.use("/api/search", searchRoute);
 app.use("/api/show", showRoute);
 app.use("/api/download", downloadRoute);

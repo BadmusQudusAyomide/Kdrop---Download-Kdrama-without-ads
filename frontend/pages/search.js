@@ -1,12 +1,8 @@
 import Head from "next/head";
-import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
-import BrandMark from "../components/BrandMark";
-import SearchBar from "../components/SearchBar";
-import ShowCard from "../components/ShowCard";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000";
+import SearchBar from "@/components/SearchBar";
+import ShowCard from "@/components/ShowCard";
 
 export default function SearchPage() {
   const router = useRouter();
@@ -23,87 +19,64 @@ export default function SearchPage() {
 
     let active = true;
 
-    async function searchShows() {
+    async function search() {
       try {
         setLoading(true);
         setError("");
-
-        const response = await fetch(
-          `${API_BASE_URL}/api/search?q=${encodeURIComponent(query)}`
-        );
-
-        if (!response.ok) {
-          throw new Error("Search failed. Please try again.");
-        }
-
-        const data = await response.json();
-
-        if (active) {
-          setResults(data.results || []);
-        }
-      } catch (searchError) {
-        if (active) {
-          setError(searchError.message);
-        }
+        const data = await fetch(`/api/search?q=${encodeURIComponent(query)}`).then((r) => {
+          if (!r.ok) throw new Error("Search failed");
+          return r.json();
+        });
+        if (active) setResults(data.results || []);
+      } catch {
+        if (active) setError("Search failed. Please try again.");
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     }
 
-    searchShows();
-
-    return () => {
-      active = false;
-    };
+    search();
+    return () => { active = false; };
   }, [query, router.isReady]);
 
   return (
     <>
       <Head>
-        <title>Search | KDrop</title>
+        <title>{query ? `"${query}" — KDrop` : "Search — KDrop"}</title>
       </Head>
 
-      <main className="page-shell">
-        <section className="topbar compact-bar">
-          <BrandMark href="/" subtitle="Back to home" />
-        </section>
-
-        <section className="subpage-hero">
+      <main className="shell">
+        <div className="page-header">
           <span className="eyebrow">Search</span>
-          <h1>Find Korean dramas by title.</h1>
-          <p className="subpage-copy">
-            Search stays focused on Korean-language TV results so the grid feels curated,
-            not noisy.
-          </p>
-          <SearchBar initialValue={query} />
-        </section>
+          <h1>Find a drama</h1>
+        </div>
 
-        {error ? <p className="status-card error">{error}</p> : null}
+        <SearchBar initialValue={query} />
 
-        {!query ? (
-          <p className="status-card">Search for a drama title to see results.</p>
-        ) : loading ? (
-          <p className="status-card">Searching for "{query}"...</p>
-        ) : (
-          <>
-            <div className="section-header">
-              <div>
-                <span className="eyebrow">Results</span>
-                <h2>{results.length} dramas found</h2>
-              </div>
-              <p className="section-note">
-                {query ? `Showing Korean TV matches for "${query}".` : ""}
-              </p>
-            </div>
-            <div className="show-grid">
-              {results.map((show) => (
-                <ShowCard key={show.id} show={show} />
-              ))}
-            </div>
-          </>
+        {error && (
+          <p className="status-msg error" style={{ marginTop: "1.5rem" }}>{error}</p>
         )}
+
+        <div style={{ marginTop: "2rem" }}>
+          {!query ? (
+            <p className="status-msg">Enter a drama title above to search.</p>
+          ) : loading ? (
+            <p className="status-msg">Searching for &quot;{query}&quot;...</p>
+          ) : results.length === 0 ? (
+            <p className="status-msg">No Korean dramas found for &quot;{query}&quot;.</p>
+          ) : (
+            <>
+              <div className="section-title" style={{ marginBottom: "1.25rem" }}>
+                <h2>{results.length} results for &quot;{query}&quot;</h2>
+              </div>
+              <div className="show-grid">
+                {results.map((show) => (
+                  <ShowCard key={show.id} show={show} />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </main>
     </>
   );

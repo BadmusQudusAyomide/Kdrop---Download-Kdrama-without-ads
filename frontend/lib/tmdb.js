@@ -1,11 +1,11 @@
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w780";
 
-const GENRE_MAP = {
+export const GENRE_MAP = {
   romance: 10749,
   thriller: 9648,
   historical: 37,
-  comedy: 35
+  comedy: 35,
 };
 
 function createHttpError(message, statusCode) {
@@ -18,7 +18,7 @@ async function tmdbFetch(path, params = {}) {
   const apiKey = process.env.TMDB_API_KEY;
 
   if (!apiKey) {
-    throw createHttpError("TMDB_API_KEY is missing from backend environment variables.", 500);
+    throw createHttpError("TMDB_API_KEY is missing from environment variables.", 500);
   }
 
   const url = new URL(`${TMDB_BASE_URL}${path}`);
@@ -30,7 +30,9 @@ async function tmdbFetch(path, params = {}) {
     }
   });
 
-  const response = await fetch(url);
+  const response = await fetch(url.toString(), {
+    next: { revalidate: 3600 },
+  });
 
   if (!response.ok) {
     const body = await response.text();
@@ -50,54 +52,59 @@ function mapShow(show) {
     year: show.first_air_date ? show.first_air_date.slice(0, 4) : null,
     vote_average: show.vote_average,
     first_air_date: show.first_air_date,
-    genre_ids: show.genre_ids || []
+    genre_ids: show.genre_ids || [],
   };
 }
 
 function filterKoreanShows(shows, genre) {
   const genreId = GENRE_MAP[genre];
-
   return shows
     .filter((show) => show.original_language === "ko")
     .filter((show) => (genreId ? show.genre_ids?.includes(genreId) : true))
     .map(mapShow);
 }
 
-async function getTrendingShows(genre = "all") {
+export async function getTrendingShows(genre = "all") {
+  if (genre !== "all" && GENRE_MAP[genre]) {
+    const data = await tmdbFetch("/discover/tv", {
+      with_original_language: "ko",
+      with_genres: GENRE_MAP[genre],
+      sort_by: "popularity.desc",
+    });
+    return (data.results || []).map(mapShow).slice(0, 18);
+  }
   const data = await tmdbFetch("/trending/tv/week");
-  return filterKoreanShows(data.results || [], genre).slice(0, 18);
+  return filterKoreanShows(data.results || [], "all").slice(0, 18);
 }
 
-async function getNewReleaseShows(genre = "all") {
+export async function getNewReleaseShows(genre = "all") {
   const data = await tmdbFetch("/discover/tv", {
     include_null_first_air_dates: false,
     language: "en-US",
     sort_by: "first_air_date.desc",
     "vote_count.gte": 5,
-    with_original_language: "ko"
+    with_original_language: "ko",
   });
-
   return filterKoreanShows(data.results || [], genre).slice(0, 18);
 }
 
-async function searchShows(query) {
+export async function searchShows(query) {
   const data = await tmdbFetch("/search/tv", {
     query,
     include_adult: false,
-    language: "en-US"
+    language: "en-US",
   });
-
   return filterKoreanShows(data.results || [], "all");
 }
 
-async function discoverShows(page = 1, genre = "all") {
+export async function discoverShows(page = 1, genre = "all") {
   const safePage = Math.min(Math.max(Number(page) || 1, 1), 500);
   const params = {
     include_null_first_air_dates: false,
     language: "en-US",
     sort_by: "popularity.desc",
     with_original_language: "ko",
-    page: safePage
+    page: safePage,
   };
 
   if (genre !== "all" && GENRE_MAP[genre]) {
@@ -110,14 +117,14 @@ async function discoverShows(page = 1, genre = "all") {
     page: data.page || safePage,
     total_pages: Math.min(data.total_pages || 1, 500),
     total_results: data.total_results || 0,
-    results: (data.results || []).map(mapShow)
+    results: (data.results || []).map(mapShow),
   };
 }
 
-async function getShowDetails(id) {
+export async function getShowDetails(id) {
   const [details, credits] = await Promise.all([
     tmdbFetch(`/tv/${id}`, { language: "en-US" }),
-    tmdbFetch(`/tv/${id}/credits`, { language: "en-US" })
+    tmdbFetch(`/tv/${id}/credits`, { language: "en-US" }),
   ]);
 
   const seasons = await Promise.all(
@@ -125,9 +132,8 @@ async function getShowDetails(id) {
       .filter((season) => season.season_number > 0)
       .map(async (season) => {
         const seasonData = await tmdbFetch(`/tv/${id}/season/${season.season_number}`, {
-          language: "en-US"
+          language: "en-US",
         });
-
         return {
           id: season.id,
           name: season.name,
@@ -139,8 +145,8 @@ async function getShowDetails(id) {
             name: episode.name,
             overview: episode.overview,
             runtime: episode.runtime,
-            air_date: episode.air_date
-          }))
+            air_date: episode.air_date,
+          })),
         };
       })
   );
@@ -153,21 +159,18 @@ async function getShowDetails(id) {
     poster: details.poster_path ? `${TMDB_IMAGE_BASE_URL}${details.poster_path}` : null,
     first_air_date: details.first_air_date,
     vote_average: details.vote_average,
+    status: details.status,
+    tagline: details.tagline,
     genres: details.genres || [],
     number_of_seasons: details.number_of_seasons,
     cast: (credits.cast || []).slice(0, 6).map((person) => ({
       id: person.id,
       name: person.name,
-      character: person.character
+      character: person.character,
+      profile: person.profile_path
+        ? `https://image.tmdb.org/t/p/w185${person.profile_path}`
+        : null,
     })),
-    seasons
+    seasons,
   };
 }
-
-module.exports = {
-  getTrendingShows,
-  getNewReleaseShows,
-  getShowDetails,
-  searchShows,
-  discoverShows
-};

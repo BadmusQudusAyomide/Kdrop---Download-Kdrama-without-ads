@@ -1,18 +1,14 @@
 import Head from "next/head";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import BrandMark from "../components/BrandMark";
-import SearchBar from "../components/SearchBar";
-import ShowCard from "../components/ShowCard";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000";
+import ShowCard from "@/components/ShowCard";
 
 const GENRES = [
   { label: "All", value: "all" },
   { label: "Romance", value: "romance" },
   { label: "Thriller", value: "thriller" },
   { label: "Historical", value: "historical" },
-  { label: "Comedy", value: "comedy" }
+  { label: "Comedy", value: "comedy" },
 ];
 
 export default function HomePage() {
@@ -25,44 +21,31 @@ export default function HomePage() {
   useEffect(() => {
     let active = true;
 
-    async function loadHome() {
+    async function load() {
       try {
         setLoading(true);
         setError("");
-
-        const [trendingResponse, releasesResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/trending?genre=${genre}`),
-          fetch(`${API_BASE_URL}/api/trending?section=new-releases&genre=${genre}`)
+        const [t, n] = await Promise.all([
+          fetch(`/api/trending?genre=${genre}`).then((r) => {
+            if (!r.ok) throw new Error("Failed");
+            return r.json();
+          }),
+          fetch(`/api/trending?section=new-releases&genre=${genre}`).then((r) => {
+            if (!r.ok) throw new Error("Failed");
+            return r.json();
+          }),
         ]);
-
-        if (!trendingResponse.ok || !releasesResponse.ok) {
-          throw new Error("Unable to load KDrama catalog right now.");
-        }
-
-        const [trendingData, releasesData] = await Promise.all([
-          trendingResponse.json(),
-          releasesResponse.json()
-        ]);
-
-        if (!active) {
-          return;
-        }
-
-        setTrending(trendingData.results || []);
-        setNewReleases(releasesData.results || []);
-      } catch (loadError) {
-        if (active) {
-          setError(loadError.message);
-        }
+        if (!active) return;
+        setTrending(t.results || []);
+        setNewReleases(n.results || []);
+      } catch {
+        if (active) setError("Failed to load dramas. Please refresh.");
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     }
 
-    loadHome();
-
+    load();
     return () => {
       active = false;
     };
@@ -71,101 +54,57 @@ export default function HomePage() {
   return (
     <>
       <Head>
-        <title>KDrop | Discover Korean Dramas</title>
+        <title>KDrop - Track Korean Dramas</title>
         <meta
           name="description"
-          content="Clean, fast KDrama discovery with episode downloads."
+          content="Discover trending Korean dramas, track your watchlist, and rate what you love."
         />
       </Head>
 
-      <main className="page-shell">
-        <section className="topbar">
-          <BrandMark subtitle="KDrama discovery" />
-          <p className="topbar-note">Clean browsing for Korean drama fans.</p>
-        </section>
-
-        <section className="hero">
-          <div className="hero-copy">
-            <span className="eyebrow">KDrama Discovery</span>
-            <h1>Find a show. Open the episodes. Download in one clean flow.</h1>
-            <p>
-              Browse trending Korean dramas, search instantly, and jump straight to
-              episode downloads without clutter.
+      <main className="shell">
+        <section className="home-hero home-panel">
+          <div>
+            <span className="eyebrow">Smart K-Drama Recommendations</span>
+            <h1>Find your next favorite series in minutes.</h1>
+            <p className="home-hero-sub">
+              Discover trending titles, filter by mood, and instantly save shows to your personal list.
             </p>
-            <SearchBar />
-            <div className="hero-pills">
-              <span>Fast search</span>
-              <span>Live TMDB metadata</span>
-              <span>Mobile-ready browsing</span>
-            </div>
           </div>
-
-          <div className="hero-panel">
-            <p className="hero-panel-title">Now Streaming Across The Scene</p>
-            <div className="hero-stats">
-              <div>
-                <strong>{trending.length || "--"}</strong>
-                <span>Trending picks</span>
-              </div>
-              <div>
-                <strong>{newReleases.length || "--"}</strong>
-                <span>Fresh arrivals</span>
-              </div>
-              <div>
-                <strong>KO</strong>
-                <span>Language-focused catalog</span>
-              </div>
-            </div>
-            <div className="hero-feature">
-              <span className="eyebrow">Focused Experience</span>
-              <p>No clutter, no ad-heavy pages, just title discovery and episode flow.</p>
-            </div>
+          <div className="home-hero-cta">
+            <Link href="/search?q=" className="btn btn-accent btn-lg">Explore Library</Link>
+            <p>Fresh picks updated daily from TMDB.</p>
           </div>
         </section>
 
-        <section className="section-row spotlight-row">
-          <article className="spotlight-card">
-            <span className="eyebrow">Tonight&apos;s Mood</span>
-            <h2>Browse by vibe before you search.</h2>
-            <p>
-              Pick a genre and the homepage reshapes itself around romance, thrillers,
-              historical stories, and lighter comfort-watch picks.
-            </p>
-          </article>
-          <div className="section-header">
-            <div>
-              <span className="eyebrow">Browse</span>
-              <h2>Genres</h2>
-            </div>
-            <div className="chip-row">
-              {GENRES.map((item) => (
-                <button
-                  key={item.value}
-                  className={`chip ${genre === item.value ? "active" : ""}`}
-                  onClick={() => setGenre(item.value)}
-                  type="button"
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+        <section className="home-panel">
+          <div className="section-title">
+            <h2>Browse By Genre</h2>
+            <span className="muted">Tap a genre to refresh sections</span>
+          </div>
+          <div className="chip-row">
+            {GENRES.map((g) => (
+              <button
+                key={g.value}
+                className={`chip ${genre === g.value ? "active" : ""}`}
+                onClick={() => setGenre(g.value)}
+              >
+                {g.label}
+              </button>
+            ))}
           </div>
         </section>
 
-        {error ? <p className="status-card error">{error}</p> : null}
+        {error && <p className="status-msg error">{error}</p>}
 
-        <section className="section-row">
-          <div className="section-header">
-            <div>
-              <span className="eyebrow">Right Now</span>
-              <h2>Trending KDramas</h2>
-            </div>
-            <Link href="/search?q=" className="inline-link">
-              Explore all
-            </Link>
+        <section className="section-block">
+          <div className="section-title">
+            <h2>Trending Now</h2>
+            <Link href="/search?q=" className="link-gold">See all</Link>
           </div>
           {loading ? (
-            <p className="status-card">Loading trending dramas...</p>
+            <p className="status-msg">Loading...</p>
+          ) : trending.length === 0 ? (
+            <p className="status-msg">No trending dramas found for this genre right now.</p>
           ) : (
             <div className="show-grid">
               {trending.map((show) => (
@@ -175,21 +114,20 @@ export default function HomePage() {
           )}
         </section>
 
-        <section className="section-row">
-          <div className="section-header">
-            <div>
-              <span className="eyebrow">Fresh Picks</span>
-              <h2>New Releases</h2>
-            </div>
+        <section className="section-block">
+          <div className="section-title">
+            <h2>New Releases</h2>
           </div>
-          {loading ? (
-            <p className="status-card">Loading new releases...</p>
-          ) : (
-            <div className="show-grid">
-              {newReleases.map((show) => (
-                <ShowCard key={show.id} show={show} />
-              ))}
-            </div>
+          {!loading && (
+            newReleases.length === 0 ? (
+              <p className="status-msg">No new releases found for this genre right now.</p>
+            ) : (
+              <div className="show-grid">
+                {newReleases.map((show) => (
+                  <ShowCard key={show.id} show={show} />
+                ))}
+              </div>
+            )
           )}
         </section>
       </main>
