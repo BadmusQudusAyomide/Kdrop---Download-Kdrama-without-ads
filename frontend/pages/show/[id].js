@@ -1,8 +1,9 @@
 import Head from "next/head";
 import { useRouter } from "next/router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import EpisodeList from "@/components/EpisodeList";
 import { useAuth } from "@/lib/auth-context";
+import { getCached, setCached, isStale } from "@/lib/show-cache";
 
 const STATUS_LABELS = {
   watching: "Watching",
@@ -11,6 +12,30 @@ const STATUS_LABELS = {
   on_hold: "On Hold",
   dropped: "Dropped",
 };
+
+function ShowSkeleton() {
+  return (
+    <div className="show-skeleton">
+      <div className="skeleton show-skeleton-backdrop" />
+      <div className="show-info-card show-skeleton-card">
+        <div className="skeleton show-skeleton-poster" />
+        <div className="show-skeleton-body">
+          <div className="skeleton show-skeleton-line" style={{ width: "38%", height: "0.7rem", marginBottom: "0.7rem" }} />
+          <div className="skeleton show-skeleton-line" style={{ width: "65%", height: "1.9rem", marginBottom: "0.9rem" }} />
+          <div className="skeleton show-skeleton-line" style={{ width: "92%", height: "0.82rem", marginBottom: "0.4rem" }} />
+          <div className="skeleton show-skeleton-line" style={{ width: "88%", height: "0.82rem", marginBottom: "0.4rem" }} />
+          <div className="skeleton show-skeleton-line" style={{ width: "55%", height: "0.82rem", marginBottom: "1.3rem" }} />
+          <div style={{ display: "flex", gap: "0.4rem", marginBottom: "1.1rem" }}>
+            {[62, 52, 78, 68].map((w, i) => (
+              <div key={i} className="skeleton" style={{ width: w, height: 24, borderRadius: 999 }} />
+            ))}
+          </div>
+          <div className="skeleton" style={{ width: 160, height: 36, borderRadius: 8 }} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ShowPage() {
   const router = useRouter();
@@ -22,67 +47,117 @@ export default function ShowPage() {
   const [error, setError] = useState("");
   const [watchStatus, setWatchStatus] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
     if (!router.isReady || !id) return;
     let active = true;
 
-    async function loadShow() {
-      try {
+    async function fetchShow(background = false) {
+      if (!background) {
         setLoading(true);
+        setError("");
+      }
+      try {
         const data = await fetch(`/api/show/${id}`).then((r) => {
           if (!r.ok) throw new Error("Failed to load");
           return r.json();
         });
+        setCached(id, data);
         if (!active) return;
         setShow(data);
-        setSeasonNumber(data.seasons?.[0]?.season_number ?? 1);
+        if (!background) {
+          setSeasonNumber(data.seasons?.[0]?.season_number ?? 1);
+        }
       } catch {
-        if (active) setError("Unable to load show details.");
+        if (active && !background) setError("Unable to load show details.");
       } finally {
-        if (active) setLoading(false);
+        if (active && !background) setLoading(false);
       }
     }
 
-    loadShow();
+    const cached = getCached(id);
+    if (cached) {
+      setShow(cached.data);
+      setSeasonNumber(cached.data.seasons?.[0]?.season_number ?? 1);
+      setLoading(false);
+      if (isStale(id)) fetchShow(true);
+    } else {
+      fetchShow(false);
+    }
+
     return () => { active = false; };
   }, [id, router.isReady]);
 
   useEffect(() => {
-    if (!user || !id || !supabase) return;
-    supabase
-      .from("watchlist_entries")
-      .select("status")
-      .eq("user_id", user.id)
-      .eq("tmdb_id", id)
-      .maybeSingle()
-      .then(({ data }) => setWatchStatus(data?.status ?? null));
-  }, [user, id, supabase]);
+    if (!id || !supabase) return;
+
+    async function loadStatus() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data } = await supabase
+        .from("watchlist_entries")
+        .select("status")
+        .eq("user_id", session.user.id)
+        .eq("tmdb_id", Number(id))
+        .maybeSingle();
+      setWatchStatus(data?.status ?? null);
+    }
+
+    loadStatus();
+  }, [id, supabase]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    function onMouseDown(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [dropdownOpen]);
 
   async function setStatus(status) {
-    if (!user) { router.push("/auth/login"); return; }
+    setSaveError("");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { router.push("/auth/login"); return; }
+
     setSaving(true);
     const next = watchStatus === status ? null : status;
-    if (next) {
-      await supabase.from("watchlist_entries").upsert(
-        {
-          user_id: user.id,
-          tmdb_id: Number(id),
-          drama_title: show.title,
-          poster_url: show.poster,
-          status: next,
-        },
-        { onConflict: "user_id,tmdb_id" }
-      );
-    } else {
-      await supabase
-        .from("watchlist_entries")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("tmdb_id", id);
+
+    try {
+      if (next) {
+        const { error } = await supabase.from("watchlist_entries").upsert(
+          {
+            user_id: session.user.id,
+            tmdb_id: Number(id),
+            drama_title: show.title,
+            poster_url: show.poster,
+            status: next,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,tmdb_id" }
+        );
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("watchlist_entries")
+          .delete()
+          .eq("user_id", session.user.id)
+          .eq("tmdb_id", Number(id));
+        if (error) throw error;
+      }
+      setWatchStatus(next);
+    } catch (err) {
+      console.error("Watchlist error:", err);
+      setSaveError(err.message || "Failed to save. Check console for details.");
+    } finally {
+      setSaving(false);
     }
-    setWatchStatus(next);
-    setSaving(false);
   }
 
   const selectedSeason = useMemo(() => {
@@ -100,11 +175,18 @@ export default function ShowPage() {
       </Head>
 
       <main className="shell">
+        <button className="back-btn" onClick={() => router.back()}>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Back
+        </button>
+
         {error && <p className="status-msg error">{error}</p>}
 
-        {loading || !show ? (
-          <p className="status-msg">Loading...</p>
-        ) : (
+        {loading && !show ? (
+          <ShowSkeleton />
+        ) : !show ? null : (
           <>
             {show.backdrop && (
               <div className="show-backdrop">
@@ -146,17 +228,49 @@ export default function ShowPage() {
                   ))}
                 </div>
 
-                <div className="watchlist-actions">
-                  {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                    <button
-                      key={key}
-                      disabled={saving}
-                      className={`btn btn-sm ${watchStatus === key ? "btn-accent" : "btn-ghost"}`}
-                      onClick={() => setStatus(key)}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                {saveError && (
+                  <p style={{ color: "var(--danger)", fontSize: "0.82rem", margin: "0.5rem 0 0" }}>
+                    {saveError}
+                  </p>
+                )}
+                <div className="watchlist-btn-wrap" ref={dropdownRef}>
+                  <button
+                    className={`btn watchlist-main-btn ${watchStatus ? "btn-accent" : "btn-ghost"}`}
+                    onClick={() => setDropdownOpen((o) => !o)}
+                    disabled={saving}
+                  >
+                    {saving
+                      ? "Saving…"
+                      : watchStatus
+                      ? `${STATUS_LABELS[watchStatus]} ▾`
+                      : "+ Add to Watchlist"}
+                  </button>
+
+                  {dropdownOpen && (
+                    <div className="watchlist-dropdown">
+                      {Object.entries(STATUS_LABELS).map(([key, label]) => (
+                        <button
+                          key={key}
+                          className={`watchlist-dropdown-item ${watchStatus === key ? "active" : ""}`}
+                          onClick={() => { setStatus(key); setDropdownOpen(false); }}
+                        >
+                          <span>{label}</span>
+                          {watchStatus === key && <span className="dropdown-check">✓</span>}
+                        </button>
+                      ))}
+                      {watchStatus && (
+                        <>
+                          <div className="watchlist-dropdown-divider" />
+                          <button
+                            className="watchlist-dropdown-item watchlist-dropdown-remove"
+                            onClick={() => { setStatus(watchStatus); setDropdownOpen(false); }}
+                          >
+                            Remove from list
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -207,7 +321,7 @@ export default function ShowPage() {
               <EpisodeList
                 showId={show.id}
                 season={selectedSeason}
-                onTrack={(epNum) => {
+                onTrack={() => {
                   if (!watchStatus) setStatus("watching");
                 }}
               />

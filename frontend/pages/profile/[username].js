@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "@/lib/auth-context";
+import { createClient } from "@/lib/supabase/client";
 
 const STATUSES = [
   { key: "watching", label: "Watching" },
@@ -21,51 +22,73 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("watching");
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    if (!router.isReady || !username || !supabase) return;
+    if (!router.isReady || !username) return;
+
+    // Use context supabase if available, otherwise create a fresh client
+    const db = supabase ?? createClient();
+    let active = true;
 
     async function load() {
       setLoading(true);
+      setNotFound(false);
+      setLoadError("");
 
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("username", username)
-        .maybeSingle();
+      try {
+        // Look up profile by username
+        const { data: profileData, error: profileError } = await db
+          .from("profiles")
+          .select("*")
+          .eq("username", username)
+          .maybeSingle();
 
-      if (!profileData) {
-        if (user && username === user.id.slice(0, 8)) {
-          const { data: ownProfile } = await supabase
-            .from("profiles")
-            .select("username")
-            .eq("id", user.id)
-            .maybeSingle();
+        if (profileError) throw profileError;
+        if (!active) return;
 
-          if (ownProfile?.username) {
-            router.replace(`/profile/${ownProfile.username}`);
-            return;
+        if (!profileData) {
+          // Not found by username — if logged in, find real username and redirect
+          const { data: { session } } = await db.auth.getSession();
+          if (session) {
+            const { data: ownProfile } = await db
+              .from("profiles")
+              .select("username")
+              .eq("id", session.user.id)
+              .maybeSingle();
+
+            if (ownProfile?.username && active) {
+              router.replace(`/profile/${ownProfile.username}`);
+              return;
+            }
           }
+          if (active) setNotFound(true);
+          return;
         }
-        setNotFound(true);
-        setLoading(false);
-        return;
+
+        setProfile(profileData);
+
+        // Fetch watchlist — empty array is fine, errors are non-fatal
+        const { data: watchData, error: watchError } = await db
+          .from("watchlist_entries")
+          .select("*")
+          .eq("user_id", profileData.id)
+          .order("updated_at", { ascending: false });
+
+        if (watchError) console.error("Watchlist fetch error:", watchError);
+        if (!active) return;
+        setEntries(watchData || []);
+      } catch (err) {
+        console.error("Profile load error:", err);
+        if (active) setLoadError(err.message || "Failed to load profile.");
+      } finally {
+        if (active) setLoading(false);
       }
-
-      setProfile(profileData);
-
-      const { data: watchData } = await supabase
-        .from("watchlist_entries")
-        .select("*")
-        .eq("user_id", profileData.id)
-        .order("updated_at", { ascending: false });
-
-      setEntries(watchData || []);
-      setLoading(false);
     }
 
     load();
-  }, [router.isReady, username, supabase, user, router]);
+    return () => { active = false; };
+  }, [router.isReady, username, supabase]);
 
   const isOwn = user?.id === profile?.id;
   const filtered = entries.filter((e) => e.status === activeTab);
@@ -93,6 +116,7 @@ export default function ProfilePage() {
       </Head>
 
       <main className="shell">
+        {loadError && <p className="status-msg error" style={{ marginBottom: "1rem" }}>{loadError}</p>}
         {loading ? (
           <p className="status-msg">Loading profile...</p>
         ) : (

@@ -50,31 +50,29 @@ export default function ShowCard({ show }) {
           ) : (
             <div className="show-poster-placeholder">No Poster</div>
           )}
+          <div className="show-card-overlay">
+            <div className="show-card-overlay-meta">
+              <span>{show.year || "—"}</span>
+              {show.vote_average > 0 && (
+                <span className="rating-badge">★ {show.vote_average.toFixed(1)}</span>
+              )}
+            </div>
+          </div>
         </div>
         <div className="show-card-info">
           <div className="show-card-title">{show.title}</div>
-          <div className="show-card-meta">
-            <span>{show.year || "-"}</span>
-            {show.vote_average > 0 && (
-              <span className="rating-badge">{show.vote_average.toFixed(1)} IMDB</span>
-            )}
-          </div>
         </div>
       </Link>
 
-      <div className="show-card-actions">
-        <Link href={`/show/${show.id}`} className="btn btn-outline btn-sm btn-full">
-          View Details
-        </Link>
-        <button
-          type="button"
-          className={`btn btn-sm btn-full ${added ? "btn-ghost" : "btn-accent"}`}
-          onClick={handleQuickAdd}
-          disabled={saving}
-        >
-          {saving ? "Saving..." : added ? "In Your List" : "Add to List"}
-        </button>
-      </div>
+      <button
+        type="button"
+        className={`show-card-add-btn ${added ? "added" : ""}`}
+        onClick={handleQuickAdd}
+        disabled={saving}
+        title={added ? "In your watchlist" : "Add to watchlist"}
+      >
+        {saving ? "…" : added ? "✓" : "+"}
+      </button>
     </article>
   );
 }

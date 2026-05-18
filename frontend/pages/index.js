@@ -62,24 +62,49 @@ export default function HomePage() {
       </Head>
 
       <main className="shell">
-        <section className="home-hero home-panel">
-          <div>
-            <span className="eyebrow">Smart K-Drama Recommendations</span>
-            <h1>Find your next favorite series in minutes.</h1>
+        <section className="home-hero">
+          <div className="home-hero-text">
+            <span className="eyebrow">Your Korean Drama Hub</span>
+            <h1>
+              Discover. Track.<br />
+              <span className="hero-accent">Fall in love again.</span>
+            </h1>
             <p className="home-hero-sub">
-              Discover trending titles, filter by mood, and instantly save shows to your personal list.
+              Explore trending titles, filter by mood, and build your personal watchlist — all in one place.
             </p>
+            <div className="home-hero-actions">
+              <Link href="/discover" className="btn btn-accent btn-lg">Browse All Dramas</Link>
+              <Link href="/search?q=" className="btn btn-ghost btn-lg">Search</Link>
+            </div>
           </div>
-          <div className="home-hero-cta">
-            <Link href="/search?q=" className="btn btn-accent btn-lg">Explore Library</Link>
-            <p>Fresh picks updated daily from TMDB.</p>
+
+          <div className="home-hero-visual">
+            {loading ? (
+              <div className="skeleton hero-featured-skeleton" />
+            ) : trending[0]?.poster ? (
+              <Link href={`/show/${trending[0].id}`} className="hero-featured-card">
+                <img
+                  className="hero-featured-img"
+                  src={trending[0].poster}
+                  alt={trending[0].title}
+                />
+                <div className="hero-featured-overlay">
+                  <span className="hero-featured-badge">Trending #1</span>
+                  <div className="hero-featured-title">{trending[0].title}</div>
+                  {trending[0].vote_average > 0 && (
+                    <div className="hero-featured-rating">
+                      ★ {trending[0].vote_average.toFixed(1)}
+                    </div>
+                  )}
+                </div>
+              </Link>
+            ) : null}
           </div>
         </section>
 
-        <section className="home-panel">
+        <section className="genre-section">
           <div className="section-title">
-            <h2>Browse By Genre</h2>
-            <span className="muted">Tap a genre to refresh sections</span>
+            <h2>Browse by Genre</h2>
           </div>
           <div className="chip-row">
             {GENRES.map((g) => (
@@ -94,12 +119,12 @@ export default function HomePage() {
           </div>
         </section>
 
-        {error && <p className="status-msg error">{error}</p>}
+        {error && <p className="status-msg error" style={{ marginTop: "1.5rem" }}>{error}</p>}
 
         <section className="section-block">
           <div className="section-title">
             <h2>Trending Now</h2>
-            <Link href="/search?q=" className="link-gold">See all</Link>
+            <Link href="/discover" className="link-gold">See all →</Link>
           </div>
           {loading ? (
             <p className="status-msg">Loading...</p>
