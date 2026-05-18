@@ -30,9 +30,20 @@ async function tmdbFetch(path, params = {}) {
     }
   });
 
-  const response = await fetch(url.toString(), {
-    next: { revalidate: 3600 },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  let response;
+  try {
+    response = await fetch(url.toString(), { signal: controller.signal });
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw createHttpError("TMDB request timed out after 8s", 504);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const body = await response.text();
